@@ -1,0 +1,109 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Student profile document",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "campus": { "type": "string" },
+        "streakDays": { "type": "number" },
+        "currency": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "displayName"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Student expense or inflow record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "amount": { "type": "number" },
+        "type": { "type": "string", "enum": ["expense", "inflow"] },
+        "categoryId": { "type": "string" },
+        "merchant": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "note": { "type": "string" },
+        "splitWithRoommate": { "type": "boolean" },
+        "roommateCount": { "type": "number" },
+        "myShare": { "type": "number" }
+      },
+      "required": ["id", "userId", "amount", "type", "categoryId", "merchant", "date", "time"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Budget category definition",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "iconName": { "type": "string" },
+        "emoji": { "type": "string" },
+        "color": { "type": "string" },
+        "bgTint": { "type": "string" },
+        "type": { "type": "string" },
+        "budgetMonthly": { "type": "number" },
+        "isCustom": { "type": "boolean" }
+      },
+      "required": ["id", "userId", "name", "emoji", "color"]
+    },
+    "SavingsJar": {
+      "title": "SavingsJar",
+      "description": "Student savings goal jar",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "targetAmount": { "type": "number" },
+        "currentAmount": { "type": "number" },
+        "emoji": { "type": "string" },
+        "color": { "type": "string" },
+        "targetDate": { "type": "string" },
+        "note": { "type": "string" }
+      },
+      "required": ["id", "userId", "title", "targetAmount", "currentAmount", "emoji"]
+    },
+    "BudgetConfig": {
+      "title": "BudgetConfig",
+      "description": "Student budget limits and fixed commitments",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "monthlyAllowance": { "type": "number" },
+        "fixedCosts": { "type": "number" },
+        "dailySafeTarget": { "type": "number" },
+        "semesterEndDate": { "type": "string" }
+      },
+      "required": ["userId", "monthlyAllowance", "fixedCosts", "dailySafeTarget"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User student profile"
+    },
+    "/users/{userId}/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Student daily transactions"
+    },
+    "/users/{userId}/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Custom and standard spending categories"
+    },
+    "/users/{userId}/savingsJars/{jarId}": {
+      "schema": "SavingsJar",
+      "description": "Student savings jars and goal trackers"
+    },
+    "/users/{userId}/config/{configId}": {
+      "schema": "BudgetConfig",
+      "description": "User budget configuration and fixed commitments"
+    }
+  }
+}

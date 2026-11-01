@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, RotateCcw } from 'lucide-react';
+import { onAuthStateChanged, User } from 'firebase/auth';
+import { auth, signOutUser, testConnection } from './firebase';
 import {
   INITIAL_PROFILE,
   INITIAL_CATEGORIES,
@@ -17,33 +19,31 @@ import { InsightsView } from './components/InsightsView';
 import { QuickAddModal } from './components/QuickAddModal';
 import { SplitBillModal } from './components/SplitBillModal';
 import { ExportModal } from './components/ExportModal';
+import { LoginPage } from './components/LoginPage';
+import {
+  seedInitialUserDataIfEmpty,
+  subscribeToUserLedger,
+  addTransactionFirestore,
+  deleteTransactionFirestore,
+  addCategoryFirestore,
+  updateCategoryBudgetFirestore,
+  updateJarAmountFirestore,
+  createJarFirestore,
+  deleteJarFirestore,
+  updateBudgetConfigFirestore,
+} from './services/firestoreSync';
 
 export default function App() {
-  // Persistence via localStorage
-  const [profile, setProfile] = useState<StudentProfile>(() => {
-    const saved = localStorage.getItem('cozy_ledger_profile');
-    return saved ? JSON.parse(saved) : INITIAL_PROFILE;
-  });
+  // Auth state
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
 
-  const [categories, setCategories] = useState<Category[]>(() => {
-    const saved = localStorage.getItem('cozy_ledger_categories');
-    return saved ? JSON.parse(saved) : INITIAL_CATEGORIES;
-  });
-
-  const [transactions, setTransactions] = useState<Transaction[]>(() => {
-    const saved = localStorage.getItem('cozy_ledger_transactions');
-    return saved ? JSON.parse(saved) : INITIAL_TRANSACTIONS;
-  });
-
-  const [savingsJars, setSavingsJars] = useState<SavingsJar[]>(() => {
-    const saved = localStorage.getItem('cozy_ledger_jars');
-    return saved ? JSON.parse(saved) : INITIAL_SAVINGS_JARS;
-  });
-
-  const [budgetConfig, setBudgetConfig] = useState<BudgetConfig>(() => {
-    const saved = localStorage.getItem('cozy_ledger_budget');
-    return saved ? JSON.parse(saved) : INITIAL_BUDGET_CONFIG;
-  });
+  // App data state synced via Firestore
+  const [profile, setProfile] = useState<StudentProfile>(INITIAL_PROFILE);
+  const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
+  const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
+  const [savingsJars, setSavingsJars] = useState<SavingsJar[]>(INITIAL_SAVINGS_JARS);
+  const [budgetConfig, setBudgetConfig] = useState<BudgetConfig>(INITIAL_BUDGET_CONFIG);
 
   // Active navigation tab
   const [activeTab, setActiveTab] = useState<TabId>('ledger');
@@ -54,26 +54,48 @@ export default function App() {
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Sync with localStorage
+  // Listen to Firebase Auth state (No offline/guest mode)
   useEffect(() => {
-    localStorage.setItem('cozy_ledger_profile', JSON.stringify(profile));
-  }, [profile]);
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setCurrentUser(user);
+      setAuthLoading(false);
 
-  useEffect(() => {
-    localStorage.setItem('cozy_ledger_categories', JSON.stringify(categories));
-  }, [categories]);
+      if (user) {
+        // Update profile with user's Google display name
+        if (user.displayName) {
+          setProfile((prev) => ({
+            ...prev,
+            name: user.displayName || prev.name,
+          }));
+        }
 
-  useEffect(() => {
-    localStorage.setItem('cozy_ledger_transactions', JSON.stringify(transactions));
-  }, [transactions]);
+        // Test connection as required by skill
+        testConnection();
 
-  useEffect(() => {
-    localStorage.setItem('cozy_ledger_jars', JSON.stringify(savingsJars));
-  }, [savingsJars]);
+        // Seed initial data if the user's collection is new
+        await seedInitialUserDataIfEmpty(user.uid, {
+          name: user.displayName || 'Student',
+          email: user.email || undefined,
+        });
+      }
+    });
 
+    return () => unsubscribe();
+  }, []);
+
+  // Subscribe to real-time Firestore when authenticated
   useEffect(() => {
-    localStorage.setItem('cozy_ledger_budget', JSON.stringify(budgetConfig));
-  }, [budgetConfig]);
+    if (!currentUser) return;
+
+    const unsubscribe = subscribeToUserLedger(currentUser.uid, {
+      onTransactions: (txs) => setTransactions(txs),
+      onCategories: (cats) => setCategories(cats),
+      onJars: (jars) => setSavingsJars(jars),
+      onBudget: (b) => setBudgetConfig(b),
+    });
+
+    return () => unsubscribe();
+  }, [currentUser]);
 
   // Keyboard shortcut: Press 'N' to open quick add
   useEffect(() => {
@@ -95,87 +117,104 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 2500);
   };
 
-  // Handlers
-  const handleAddTransaction = (newTx: Omit<Transaction, 'id'>) => {
+  // Handlers - all persist directly to Firestore
+  const handleAddTransaction = async (newTx: Omit<Transaction, 'id'>) => {
+    if (!currentUser) return;
     const created: Transaction = {
       ...newTx,
       id: `tx-${Date.now()}`,
     };
-    setTransactions((prev) => [created, ...prev]);
-    showToast(newTx.type === 'expense' ? 'Expense logged successfully 🐾' : 'Allowance recorded! 💵');
+
+    await addTransactionFirestore(currentUser.uid, created);
+    showToast(newTx.type === 'expense' ? 'Expense logged 🐾' : 'Allowance recorded! 💵');
   };
 
-  const handleDeleteTransaction = (id: string) => {
-    setTransactions((prev) => prev.filter((t) => t.id !== id));
+  const handleDeleteTransaction = async (id: string) => {
+    if (!currentUser) return;
+    await deleteTransactionFirestore(currentUser.uid, id);
     showToast('Transaction removed');
   };
 
-  const handleAddCategory = (newCat: Category) => {
-    setCategories((prev) => [...prev, newCat]);
+  const handleAddCategory = async (newCat: Category) => {
+    if (!currentUser) return;
+    await addCategoryFirestore(currentUser.uid, newCat);
     showToast(`Added category: ${newCat.name}`);
   };
 
-  const handleUpdateCategoryBudget = (catId: string, newBudget: number) => {
-    setCategories((prev) =>
-      prev.map((c) => (c.id === catId ? { ...c, budgetMonthly: newBudget } : c))
-    );
+  const handleUpdateCategoryBudget = async (catId: string, newBudget: number) => {
+    if (!currentUser) return;
+    await updateCategoryBudgetFirestore(currentUser.uid, catId, newBudget);
   };
 
-  const handleUpdateBudgetConfig = (newConfig: BudgetConfig) => {
-    setBudgetConfig(newConfig);
+  const handleUpdateBudgetConfig = async (newConfig: BudgetConfig) => {
+    if (!currentUser) return;
+    await updateBudgetConfigFirestore(currentUser.uid, newConfig);
     showToast('Budget settings updated');
   };
 
-  const handleUpdateJarAmount = (jarId: string, delta: number) => {
-    setSavingsJars((prev) =>
-      prev.map((j) => {
-        if (j.id === jarId) {
-          const nextVal = Math.max(0, j.currentAmount + delta);
-          return { ...j, currentAmount: nextVal };
-        }
-        return j;
-      })
-    );
+  const handleUpdateJarAmount = async (jarId: string, delta: number) => {
+    if (!currentUser) return;
+    const jar = savingsJars.find((j) => j.id === jarId);
+    if (!jar) return;
+
+    await updateJarAmountFirestore(currentUser.uid, jarId, delta, jar.currentAmount);
     showToast(delta > 0 ? 'Tossed coins into jar! 🪙' : 'Withdrawn from jar');
   };
 
-  const handleCreateJar = (newJar: Omit<SavingsJar, 'id'>) => {
+  const handleCreateJar = async (newJar: Omit<SavingsJar, 'id'>) => {
+    if (!currentUser) return;
     const jar: SavingsJar = {
       ...newJar,
       id: `jar-${Date.now()}`,
     };
-    setSavingsJars((prev) => [...prev, jar]);
+
+    await createJarFirestore(currentUser.uid, jar);
     showToast('New savings jar created! 🍯');
   };
 
-  const handleDeleteJar = (jarId: string) => {
-    setSavingsJars((prev) => prev.filter((j) => j.id !== jarId));
+  const handleDeleteJar = async (jarId: string) => {
+    if (!currentUser) return;
+    await deleteJarFirestore(currentUser.uid, jarId);
     showToast('Jar removed');
   };
 
-  const handleResetData = () => {
-    if (window.confirm('Reset all transactions and settings to fresh sample student ledger?')) {
-      setTransactions(INITIAL_TRANSACTIONS);
-      setCategories(INITIAL_CATEGORIES);
-      setSavingsJars(INITIAL_SAVINGS_JARS);
-      setBudgetConfig(INITIAL_BUDGET_CONFIG);
-      setProfile(INITIAL_PROFILE);
-      localStorage.clear();
-      showToast('Reset to original sample data 🐾');
+  const handleSignOut = async () => {
+    try {
+      await signOutUser();
+      showToast('Signed out of student account');
+    } catch (err) {
+      console.error('Sign-out error:', err);
     }
   };
 
+  // Auth loading state
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-[#F5F0E6] flex flex-col items-center justify-center p-4">
+        <div className="text-4xl animate-bounce mb-3">🐱☕</div>
+        <p className="text-sm font-bold text-[#45372F]">Opening Kopi Duit...</p>
+      </div>
+    );
+  }
+
+  // Offline mode disabled: User must sign in
+  if (!currentUser) {
+    return <LoginPage />;
+  }
+
   return (
     <div className="min-h-screen bg-[#F5F0E6] flex flex-col font-sans selection:bg-[#E9C66A]/30">
-      {/* Sticky Header */}
+      {/* Sticky Header with Kopi Duit branding */}
       <Header
         profile={profile}
+        currentUser={currentUser}
         onOpenQuickAdd={() => setIsQuickAddOpen(true)}
         onOpenExport={() => setIsExportOpen(true)}
         onOpenSplitTool={() => setIsSplitBillOpen(true)}
+        onSignOut={handleSignOut}
       />
 
-      {/* Main Container: Max 1120px centered with 1.5rem gutters on desktop as per spec */}
+      {/* Main Container: Max 1120px centered with 1.5rem gutters on desktop */}
       <main className="flex-1 max-w-[1120px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 pb-24 md:pb-12">
         <div className="flex gap-6 items-start">
           {/* Docked Left Rail on Desktop / Tablet */}
@@ -280,19 +319,13 @@ export default function App() {
       <footer className="border-t border-[#E8DFD1]/60 py-5 bg-[#FAF6EE]/50 text-center text-xs text-[#786E65]">
         <div className="max-w-[1120px] mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <p className="flex items-center gap-1.5 font-medium">
-            <span>Warm Whimsical Student Ledger</span>
+            <span>Kopi Duit</span>
             <span>•</span>
-            <span>Designed for tertiary undergraduates</span>
+            <span>Personal finance ledger for university undergraduates</span>
             <span>🐾</span>
           </p>
           <div className="flex items-center gap-4 text-[11px]">
             <span className="text-[#88726D]">Press 'N' to log spend</span>
-            <button
-              onClick={handleResetData}
-              className="hover:text-[#A6533D] flex items-center gap-1 transition-colors cursor-pointer"
-            >
-              <RotateCcw size={11} /> Reset Sample Data
-            </button>
           </div>
         </div>
       </footer>

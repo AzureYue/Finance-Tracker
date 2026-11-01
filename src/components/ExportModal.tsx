@@ -57,7 +57,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Student_Ledger_${currentMonth}_${profile.name.replace(/\s+/g, '_')}.csv`);
+    link.setAttribute('download', `Kopi_Duit_Ledger_${currentMonth}_${profile.name.replace(/\s+/g, '_')}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -84,7 +84,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `Student_Ledger_Backup_${currentMonth}.json`;
+    link.download = `Kopi_Duit_Backup_${currentMonth}.json`;
     link.click();
     URL.revokeObjectURL(url);
 
