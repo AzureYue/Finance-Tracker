@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { BookOpen, Target, Sparkles, ReceiptText } from 'lucide-react';
 
