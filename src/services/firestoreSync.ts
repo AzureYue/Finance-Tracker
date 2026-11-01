@@ -101,7 +101,7 @@ export function subscribeToUserLedger(
   callbacks: {
     onTransactions: (txs: Transaction[]) => void;
     onCategories: (cats: Category[]) => void;
-    onJars: (jars: SavingsJar[]) => void;
+    onJars?: (jars: SavingsJar[]) => void;
     onBudget: (b: BudgetConfig) => void;
   }
 ): () => void {
@@ -139,7 +139,7 @@ export function subscribeToUserLedger(
   const unsubJars = onSnapshot(
     collection(db, 'users', uid, 'savingsJars'),
     (snap) => {
-      callbacks.onJars(snap.docs.map((d) => d.data() as SavingsJar));
+      callbacks.onJars?.(snap.docs.map((d) => d.data() as SavingsJar));
     },
     (err) => handleFirestoreError(err, OperationType.GET, jarPath)
   );

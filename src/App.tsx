@@ -5,16 +5,14 @@ import { auth, signOutUser, testConnection } from './firebase';
 import {
   INITIAL_PROFILE,
   INITIAL_CATEGORIES,
-  INITIAL_SAVINGS_JARS,
   INITIAL_BUDGET_CONFIG,
   INITIAL_TRANSACTIONS,
 } from './data/initialData';
-import { Transaction, Category, SavingsJar, BudgetConfig, StudentProfile } from './types';
+import { Transaction, Category, BudgetConfig, StudentProfile } from './types';
 import { Header } from './components/Header';
 import { NavigationRail, TabId } from './components/NavigationRail';
 import { DailyLedgerView } from './components/DailyLedgerView';
 import { BudgetWalletsView } from './components/BudgetWalletsView';
-import { SavingsJarsView } from './components/SavingsJarsView';
 import { InsightsView } from './components/InsightsView';
 import { QuickAddModal } from './components/QuickAddModal';
 import { SplitBillModal } from './components/SplitBillModal';
@@ -27,9 +25,6 @@ import {
   deleteTransactionFirestore,
   addCategoryFirestore,
   updateCategoryBudgetFirestore,
-  updateJarAmountFirestore,
-  createJarFirestore,
-  deleteJarFirestore,
   updateBudgetConfigFirestore,
 } from './services/firestoreSync';
 
@@ -42,7 +37,6 @@ export default function App() {
   const [profile, setProfile] = useState<StudentProfile>(INITIAL_PROFILE);
   const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
   const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
-  const [savingsJars, setSavingsJars] = useState<SavingsJar[]>(INITIAL_SAVINGS_JARS);
   const [budgetConfig, setBudgetConfig] = useState<BudgetConfig>(INITIAL_BUDGET_CONFIG);
 
   // Active navigation tab
@@ -90,7 +84,6 @@ export default function App() {
     const unsubscribe = subscribeToUserLedger(currentUser.uid, {
       onTransactions: (txs) => setTransactions(txs),
       onCategories: (cats) => setCategories(cats),
-      onJars: (jars) => setSavingsJars(jars),
       onBudget: (b) => setBudgetConfig(b),
     });
 
@@ -150,32 +143,6 @@ export default function App() {
     if (!currentUser) return;
     await updateBudgetConfigFirestore(currentUser.uid, newConfig);
     showToast('Budget settings updated');
-  };
-
-  const handleUpdateJarAmount = async (jarId: string, delta: number) => {
-    if (!currentUser) return;
-    const jar = savingsJars.find((j) => j.id === jarId);
-    if (!jar) return;
-
-    await updateJarAmountFirestore(currentUser.uid, jarId, delta, jar.currentAmount);
-    showToast(delta > 0 ? 'Tossed coins into jar! 🪙' : 'Withdrawn from jar');
-  };
-
-  const handleCreateJar = async (newJar: Omit<SavingsJar, 'id'>) => {
-    if (!currentUser) return;
-    const jar: SavingsJar = {
-      ...newJar,
-      id: `jar-${Date.now()}`,
-    };
-
-    await createJarFirestore(currentUser.uid, jar);
-    showToast('New savings jar created! 🍯');
-  };
-
-  const handleDeleteJar = async (jarId: string) => {
-    if (!currentUser) return;
-    await deleteJarFirestore(currentUser.uid, jarId);
-    showToast('Jar removed');
   };
 
   const handleSignOut = async () => {
@@ -244,16 +211,6 @@ export default function App() {
                 currency={profile.currency}
                 onUpdateBudgetConfig={handleUpdateBudgetConfig}
                 onUpdateCategoryBudget={handleUpdateCategoryBudget}
-              />
-            )}
-
-            {activeTab === 'jars' && (
-              <SavingsJarsView
-                jars={savingsJars}
-                currency={profile.currency}
-                onUpdateJarAmount={handleUpdateJarAmount}
-                onCreateJar={handleCreateJar}
-                onDeleteJar={handleDeleteJar}
               />
             )}
 

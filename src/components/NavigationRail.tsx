@@ -1,7 +1,7 @@
 import React from 'react';
-import { BookOpen, Target, PiggyBank, Sparkles, ReceiptText } from 'lucide-react';
+import { BookOpen, Target, Sparkles, ReceiptText } from 'lucide-react';
 
-export type TabId = 'ledger' | 'budgets' | 'jars' | 'insights';
+export type TabId = 'ledger' | 'budgets' | 'insights';
 
 interface NavigationRailProps {
   activeTab: TabId;
@@ -16,7 +16,6 @@ export const NavigationRail: React.FC<NavigationRailProps> = ({
   const tabs = [
     { id: 'ledger' as TabId, label: 'Daily Ledger', icon: BookOpen, emoji: '📖' },
     { id: 'budgets' as TabId, label: 'Budget Wallets', icon: Target, emoji: '🎯' },
-    { id: 'jars' as TabId, label: 'Savings Jars', icon: PiggyBank, emoji: '🍯' },
     { id: 'insights' as TabId, label: "Kopi's Whispers", icon: Sparkles, emoji: '🐾' },
   ];
 
